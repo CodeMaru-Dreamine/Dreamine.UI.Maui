@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Dreamine.UI.Maui.DreamineCheckBox">
+
+    <HorizontalStackLayout Spacing="6">
+        <Border x:Name="Box"
+                WidthRequest="20" HeightRequest="20"
+                StrokeThickness="1.5"
+                Stroke="#7A8AA0"
+                BackgroundColor="Transparent"
+                VerticalOptions="Center">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="4" />
+            </Border.StrokeShape>
+            <Label x:Name="CheckMark" Text="✓" TextColor="White" FontSize="13"
+                   HorizontalOptions="Center" VerticalOptions="Center" IsVisible="False" />
+        </Border>
+        <Label x:Name="TextLabel" VerticalOptions="Center" />
+
+        <HorizontalStackLayout.GestureRecognizers>
+            <TapGestureRecognizer Tapped="OnTapped" />
+        </HorizontalStackLayout.GestureRecognizers>
+    </HorizontalStackLayout>
+</ContentView>

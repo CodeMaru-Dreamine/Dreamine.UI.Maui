@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Dreamine.UI.Maui.Popup.DreamineMessageBoxPage"
+             BackgroundColor="#80000000">
+
+    <Grid>
+        <Border x:Name="Card"
+                BackgroundColor="#0F1E3A"
+                Stroke="#2D4A6E"
+                StrokeThickness="1.5"
+                HorizontalOptions="Center"
+                VerticalOptions="Center"
+                WidthRequest="360"
+                Padding="0">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="10" />
+            </Border.StrokeShape>
+
+            <Grid RowDefinitions="44,Auto,Auto" RowSpacing="0">
+
+                <BoxView Grid.Row="0" Color="#0D1B3E" />
+                <Label x:Name="TitleLabel" Grid.Row="0" TextColor="White" FontAttributes="Bold"
+                       FontSize="15" VerticalOptions="Center" Margin="16,0,0,0" />
+
+                <Label x:Name="MessageLabel" Grid.Row="1" TextColor="White" FontSize="13"
+                       Margin="20,20,20,8" LineBreakMode="WordWrap" />
+
+                <HorizontalStackLayout x:Name="ButtonRow" Grid.Row="2"
+                       HorizontalOptions="End" Spacing="8" Margin="0,8,16,16" />
+
+            </Grid>
+        </Border>
+    </Grid>
+</ContentPage>

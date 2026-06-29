@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Dreamine.UI.Maui.DreamineVirtualKeyboard"
+             IsVisible="False">
+
+    <Border BackgroundColor="#0F1E3A" Stroke="#2D4A6E" StrokeThickness="1" Padding="8">
+        <Border.StrokeShape>
+            <RoundRectangle CornerRadius="8" />
+        </Border.StrokeShape>
+
+        <VerticalStackLayout x:Name="RowsHost" Spacing="4" />
+    </Border>
+</ContentView>
