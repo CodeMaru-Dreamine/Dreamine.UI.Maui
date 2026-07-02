@@ -1,187 +1,348 @@
 namespace Dreamine.UI.Maui;
 
 /// <summary>
-/// WPF/WinForms 가상 키보드와 동일한 목적의 MAUI용 화면 키보드 데모.
-/// 실제 모바일/태블릿에서는 OS가 기본 키보드를 제공하므로 보통 필요 없지만,
-/// 다른 플랫폼들과 시각적으로 동일한 느낌을 보여주기 위한 데모 컴포넌트다
-/// (Windows 데스크톱 모드처럼 OS 키보드가 안 뜨는 환경에서 유용).
-/// 표준 영문 QWERTY 배열(특수문자 포함)을 흉내낸다. 한글 조합은 지원하지 않는다.
+/// WPF/WinForms 가상 키보드와 같은 5행 QWERTY 레이아웃의 MAUI 화면 키보드.
+/// 브라우저/모바일 OS IME 제어가 아니라, 연결된 Entry에 직접 텍스트를 편집한다.
 /// </summary>
 public partial class DreamineVirtualKeyboard : ContentView
 {
-    private enum ShiftState { Off, Once, Lock }
+    private static readonly Color KeyBackground = Color.FromArgb("#F1685E");
+    private static readonly Color KeySelectedBackground = Color.FromArgb("#F59584");
 
-    // 표준 미국식 키보드와 동일하게, Shift를 누르면 숫자/기호 키도 같이 바뀐다.
-    private static readonly (string Normal, string Shifted)[] NumberRow =
-    {
-        ("1", "!"), ("2", "@"), ("3", "#"), ("4", "$"), ("5", "%"),
-        ("6", "^"), ("7", "&"), ("8", "*"), ("9", "("), ("0", ")"),
-        ("-", "_"), ("=", "+"),
-    };
-
-    private static readonly (string Normal, string Shifted)[] Row2 =
-    {
-        ("q", "Q"), ("w", "W"), ("e", "E"), ("r", "R"), ("t", "T"), ("y", "Y"),
-        ("u", "U"), ("i", "I"), ("o", "O"), ("p", "P"), ("[", "{"), ("]", "}"),
-    };
-
-    private static readonly (string Normal, string Shifted)[] Row3 =
-    {
-        ("a", "A"), ("s", "S"), ("d", "D"), ("f", "F"), ("g", "G"), ("h", "H"),
-        ("j", "J"), ("k", "K"), ("l", "L"), (";", ":"), ("'", "\""),
-    };
-
-    private static readonly (string Normal, string Shifted)[] Row4 =
-    {
-        ("z", "Z"), ("x", "X"), ("c", "C"), ("v", "V"), ("b", "B"), ("n", "N"),
-        ("m", "M"), (",", "<"), (".", ">"), ("/", "?"),
-    };
-
+    private readonly List<KeyButton> _textKeys = [];
+    private readonly HangulComposer _composer = new();
     private Entry? _target;
-    private ShiftState _shift = ShiftState.Off;
-    private DateTime _lastShiftTap = DateTime.MinValue;
-    private readonly List<Button> _shiftButtons = new();
-    private readonly List<(Button Button, string Normal, string Shifted)> _shiftableButtons = new();
+
+    private bool _shift;
+    private bool _capsLock;
+    private bool _korean;
+    private Button? _shiftButton;
+    private Button? _capsButton;
+    private Button? _languageButton;
 
     public DreamineVirtualKeyboard()
     {
         InitializeComponent();
-        RowsHost.Children.Add(BuildShiftableRow(NumberRow, trailing: MakeKey("⌫", Backspace, 44)));
-        RowsHost.Children.Add(BuildShiftableRow(Row2));
-        RowsHost.Children.Add(BuildShiftableRow(Row3, trailing: MakeKey("Enter", OnEnter, 60)));
-        RowsHost.Children.Add(BuildRow4());
-        RowsHost.Children.Add(BuildActionRow());
-        RefreshKeyLabels();
+        BuildKeyboard();
+        RefreshKeys();
     }
 
     /// <summary>이 키보드가 입력을 보낼 대상 Entry를 연결한다.</summary>
     public void Attach(Entry entry)
     {
         _target = entry;
-        // Unfocused로 자동 숨김 처리하면, 키보드의 키 버튼을 누르는 순간 Entry가 포커스를
-        // 잃으면서(버튼으로 포커스 이동) 키보드가 바로 사라지고 Click 처리까지 끊겨서
-        // 글자가 입력되지 않는다. 그래서 숨김은 "Enter" 버튼으로만 한다.
         entry.Focused += (_, _) => IsVisible = true;
     }
 
-    private HorizontalStackLayout BuildShiftableRow((string Normal, string Shifted)[] keys, Button? trailing = null)
+    private void BuildKeyboard()
     {
-        var row = new HorizontalStackLayout { Spacing = 3, HorizontalOptions = LayoutOptions.Center };
-        foreach (var key in keys)
-            row.Children.Add(MakeShiftableKey(key.Normal, key.Shifted));
+        RowsHost.Children.Clear();
 
-        if (trailing is not null)
-            row.Children.Add(trailing);
-        return row;
+        AddRow(
+        [
+            KeySpec.Command("Esc", 54, HideKeyboard),
+            KeySpec.Text("`"), KeySpec.Text("1"), KeySpec.Text("2"), KeySpec.Text("3"), KeySpec.Text("4"),
+            KeySpec.Text("5"), KeySpec.Text("6"), KeySpec.Text("7"), KeySpec.Text("8"), KeySpec.Text("9"),
+            KeySpec.Text("0"), KeySpec.Text("-"), KeySpec.Text("="),
+            KeySpec.Command("Backspace", 116, Backspace)
+        ]);
+
+        AddRow(
+        [
+            KeySpec.Command("Tab", 100, () => InsertRaw("    ")),
+            KeySpec.Text("q"), KeySpec.Text("w"), KeySpec.Text("e"), KeySpec.Text("r"), KeySpec.Text("t"),
+            KeySpec.Text("y"), KeySpec.Text("u"), KeySpec.Text("i"), KeySpec.Text("o"), KeySpec.Text("p"),
+            KeySpec.Text("["), KeySpec.Text("]"), KeySpec.Text("\\", 100)
+        ]);
+
+        AddRow(
+        [
+            KeySpec.Command("Caps Lock", 116, ToggleCapsLock),
+            KeySpec.Text("a"), KeySpec.Text("s"), KeySpec.Text("d"), KeySpec.Text("f"), KeySpec.Text("g"),
+            KeySpec.Text("h"), KeySpec.Text("j"), KeySpec.Text("k"), KeySpec.Text("l"),
+            KeySpec.Text(";"), KeySpec.Text("'"),
+            KeySpec.Command("Enter", 116, OnEnter)
+        ]);
+
+        AddRow(
+        [
+            KeySpec.Command("Shift", 138, ToggleShift),
+            KeySpec.Text("z"), KeySpec.Text("x"), KeySpec.Text("c"), KeySpec.Text("v"), KeySpec.Text("b"),
+            KeySpec.Text("n"), KeySpec.Text("m"), KeySpec.Text(","), KeySpec.Text("."), KeySpec.Text("/"),
+            KeySpec.Command("◀", 58, MoveLeft),
+            KeySpec.Command("▶", 58, MoveRight)
+        ]);
+
+        AddRow(
+        [
+            KeySpec.Command("Ctrl", 124, () => { }),
+            KeySpec.Command("Space", 696, () => InsertRaw(" ")),
+            KeySpec.Command("abc", 72, ToggleLanguage)
+        ]);
     }
 
-    private HorizontalStackLayout BuildRow4()
+    private void AddRow(IReadOnlyList<KeySpec> specs)
     {
-        var row = new HorizontalStackLayout { Spacing = 3, HorizontalOptions = LayoutOptions.Center };
-        row.Children.Add(MakeShiftKey());
-        foreach (var key in Row4)
-            row.Children.Add(MakeShiftableKey(key.Normal, key.Shifted));
-        row.Children.Add(MakeShiftKey());
-        return row;
+        var row = new Grid
+        {
+            ColumnSpacing = 4,
+            HeightRequest = 54,
+            HorizontalOptions = LayoutOptions.Fill
+        };
+
+        for (var i = 0; i < specs.Count; i++)
+        {
+            var width = specs[i].Width;
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(width, GridUnitType.Star) });
+            var button = MakeKey(specs[i]);
+            row.Add(button, i, 0);
+        }
+
+        RowsHost.Children.Add(row);
     }
 
-    private HorizontalStackLayout BuildActionRow()
-    {
-        var row = new HorizontalStackLayout { Spacing = 3, HorizontalOptions = LayoutOptions.Center };
-        row.Children.Add(MakeKey("Space", () => InsertText(" "), 280));
-        return row;
-    }
-
-    private Button MakeShiftableKey(string normal, string shifted)
-    {
-        var button = MakeKey(normal, () => InsertShiftable(normal, shifted));
-        _shiftableButtons.Add((button, normal, shifted));
-        return button;
-    }
-
-    private Button MakeShiftKey()
-    {
-        var button = MakeKey("⇧", OnShiftTapped, 46);
-        _shiftButtons.Add(button);
-        return button;
-    }
-
-    private Button MakeKey(string text, Action onTap, double width = 32)
+    private Button MakeKey(KeySpec spec)
     {
         var button = new Button
         {
-            Text = text,
-            WidthRequest = width,
-            HeightRequest = 32,
+            Text = spec.Label,
+            HeightRequest = 54,
             Padding = 0,
-            FontSize = 12,
-            BackgroundColor = Color.FromArgb("#16284D"),
+            FontSize = spec.Width > 90 ? 14 : 16,
+            BackgroundColor = KeyBackground,
             TextColor = Colors.White,
             CornerRadius = 4
         };
-        button.Clicked += (_, _) => onTap();
+
+        if (spec.Kind == KeyKind.Text)
+            _textKeys.Add(new KeyButton(button, spec.Label));
+
+        if (spec.Label == "Shift")
+            _shiftButton = button;
+        else if (spec.Label == "Caps Lock")
+            _capsButton = button;
+        else if (spec.Label is "abc" or "가")
+            _languageButton = button;
+
+        button.Clicked += (_, _) =>
+        {
+            if (_target is null)
+                return;
+
+            if (spec.Kind == KeyKind.Text)
+                InsertKey(spec.Label);
+            else
+                spec.Action?.Invoke();
+        };
+
         return button;
     }
 
-    private void OnShiftTapped()
+    private void InsertKey(string key)
     {
-        var isDoubleTap = (DateTime.Now - _lastShiftTap).TotalMilliseconds < 400;
-        _lastShiftTap = DateTime.Now;
-
-        _shift = isDoubleTap
-            ? (_shift == ShiftState.Lock ? ShiftState.Off : ShiftState.Lock)
-            : (_shift == ShiftState.Off ? ShiftState.Once : ShiftState.Off);
-
-        RefreshKeyLabels();
-    }
-
-    /// <summary>Shift/Caps 상태에 맞춰 글자·숫자·기호 키에 실제로 표시되는 텍스트를 전부 갱신한다.</summary>
-    private void RefreshKeyLabels()
-    {
-        var shifted = _shift != ShiftState.Off;
-        foreach (var (button, normal, shiftedText) in _shiftableButtons)
-            button.Text = shifted ? shiftedText : normal;
-
-        foreach (var shiftButton in _shiftButtons)
-            shiftButton.BackgroundColor = _shift switch
-            {
-                ShiftState.Lock => Color.FromArgb("#0d6efd"),
-                ShiftState.Once => Color.FromArgb("#3a6fc4"),
-                _ => Color.FromArgb("#16284D")
-            };
-    }
-
-    private void InsertShiftable(string normal, string shifted)
-    {
-        InsertText(_shift != ShiftState.Off ? shifted : normal);
-        if (_shift == ShiftState.Once)
+        var text = GetKeyText(key);
+        if (_korean && HangulComposer.IsComposableJamo(text))
         {
-            _shift = ShiftState.Off;
-            RefreshKeyLabels();
+            var edit = _composer.Input(text, GetTextBeforeCaret());
+            ReplaceTextTail(edit.ReplaceCount, edit.Text);
+        }
+        else
+        {
+            _composer.Reset();
+            InsertRaw(text);
+        }
+
+        if (_shift)
+        {
+            _shift = false;
+            RefreshKeys();
         }
     }
 
-    private void InsertText(string text)
+    private void InsertRaw(string text)
     {
-        if (_target is null) return;
-        var cursor = _target.CursorPosition;
-        _target.Text = (_target.Text ?? string.Empty).Insert(Math.Min(cursor, _target.Text?.Length ?? 0), text);
-        _target.CursorPosition = cursor + text.Length;
+        if (_target is null)
+            return;
+
+        _composer.Reset();
+        ReplaceTextTail(0, text);
+    }
+
+    private void ReplaceTextTail(int replaceCount, string text)
+    {
+        if (_target is null)
+            return;
+
+        var current = _target.Text ?? string.Empty;
+        var selectionStart = Math.Clamp(_target.CursorPosition, 0, current.Length);
+        var selectionLength = Math.Clamp(_target.SelectionLength, 0, current.Length - selectionStart);
+
+        if (selectionLength > 0)
+        {
+            _target.Text = current.Remove(selectionStart, selectionLength).Insert(selectionStart, text);
+            _target.CursorPosition = selectionStart + text.Length;
+        }
+        else
+        {
+            var removeStart = Math.Max(0, selectionStart - replaceCount);
+            removeStart = Math.Min(removeStart, current.Length);
+            var removeLength = Math.Clamp(selectionStart - removeStart, 0, current.Length - removeStart);
+            _target.Text = current.Remove(removeStart, removeLength).Insert(removeStart, text);
+            _target.CursorPosition = removeStart + text.Length;
+        }
+    }
+
+    private string GetTextBeforeCaret()
+    {
+        if (_target is null)
+            return string.Empty;
+
+        var text = _target.Text ?? string.Empty;
+        var caret = Math.Clamp(_target.CursorPosition, 0, text.Length);
+        return text[..caret];
     }
 
     private void Backspace()
     {
-        if (_target is null || string.IsNullOrEmpty(_target.Text)) return;
-        var cursor = _target.CursorPosition;
-        if (cursor <= 0) return;
-        _target.Text = _target.Text.Remove(cursor - 1, 1);
-        _target.CursorPosition = cursor - 1;
+        if (_target is null)
+            return;
+
+        _composer.Reset();
+        var current = _target.Text ?? string.Empty;
+        var selectionStart = Math.Clamp(_target.CursorPosition, 0, current.Length);
+        var selectionLength = Math.Clamp(_target.SelectionLength, 0, current.Length - selectionStart);
+
+        if (selectionLength > 0)
+        {
+            _target.Text = current.Remove(selectionStart, selectionLength);
+            _target.CursorPosition = selectionStart;
+        }
+        else if (selectionStart > 0)
+        {
+            _target.Text = current.Remove(selectionStart - 1, 1);
+            _target.CursorPosition = selectionStart - 1;
+        }
+    }
+
+    private void ToggleShift()
+    {
+        _shift = !_shift;
+        RefreshKeys();
+    }
+
+    private void ToggleCapsLock()
+    {
+        _capsLock = !_capsLock;
+        _composer.Reset();
+        RefreshKeys();
+    }
+
+    private void ToggleLanguage()
+    {
+        _korean = !_korean;
+        _composer.Reset();
+        RefreshKeys();
+    }
+
+    private void MoveLeft()
+    {
+        if (_target is null)
+            return;
+
+        _target.CursorPosition = Math.Max(0, _target.CursorPosition - 1);
+        _target.SelectionLength = 0;
+    }
+
+    private void MoveRight()
+    {
+        if (_target is null)
+            return;
+
+        _target.CursorPosition = Math.Min((_target.Text ?? string.Empty).Length, _target.CursorPosition + 1);
+        _target.SelectionLength = 0;
+    }
+
+    private void HideKeyboard()
+    {
+        _composer.Reset();
+        IsVisible = false;
     }
 
     /// <summary>Entry는 한 줄짜리라 줄바꿈 대신 입력 완료로 취급해 키보드를 닫는다.</summary>
     private void OnEnter()
     {
+        _composer.Reset();
         _target?.Unfocus();
         IsVisible = false;
+    }
+
+    private void RefreshKeys()
+    {
+        foreach (var key in _textKeys)
+            key.Button.Text = GetKeyText(key.BaseText);
+
+        if (_shiftButton is not null)
+            _shiftButton.BackgroundColor = _shift ? KeySelectedBackground : KeyBackground;
+
+        if (_capsButton is not null)
+            _capsButton.BackgroundColor = _capsLock ? KeySelectedBackground : KeyBackground;
+
+        if (_languageButton is not null)
+        {
+            _languageButton.Text = _korean ? "가" : "abc";
+            _languageButton.BackgroundColor = _korean ? KeySelectedBackground : KeyBackground;
+        }
+    }
+
+    private string GetKeyText(string key)
+    {
+        if (_korean && KoreanKeys.TryGetValue(key, out var korean))
+            return _shift && KoreanShiftKeys.TryGetValue(key, out var koreanShift) ? koreanShift : korean;
+
+        if (_shift && ShiftKeys.TryGetValue(key, out var shifted))
+            return shifted;
+
+        if (key.Length == 1 && char.IsLetter(key[0]))
+            return _shift ^ _capsLock ? key.ToUpperInvariant() : key.ToLowerInvariant();
+
+        return key;
+    }
+
+    private static readonly Dictionary<string, string> ShiftKeys = new()
+    {
+        ["`"] = "~", ["1"] = "!", ["2"] = "@", ["3"] = "#", ["4"] = "$",
+        ["5"] = "%", ["6"] = "^", ["7"] = "&", ["8"] = "*", ["9"] = "(",
+        ["0"] = ")", ["-"] = "_", ["="] = "+", ["["] = "{", ["]"] = "}",
+        ["\\"] = "|", [";"] = ":", ["'"] = "\"", [","] = "<", ["."] = ">",
+        ["/"] = "?",
+    };
+
+    private static readonly Dictionary<string, string> KoreanKeys = new()
+    {
+        ["q"] = "ㅂ", ["w"] = "ㅈ", ["e"] = "ㄷ", ["r"] = "ㄱ", ["t"] = "ㅅ",
+        ["y"] = "ㅛ", ["u"] = "ㅕ", ["i"] = "ㅑ", ["o"] = "ㅐ", ["p"] = "ㅔ",
+        ["a"] = "ㅁ", ["s"] = "ㄴ", ["d"] = "ㅇ", ["f"] = "ㄹ", ["g"] = "ㅎ",
+        ["h"] = "ㅗ", ["j"] = "ㅓ", ["k"] = "ㅏ", ["l"] = "ㅣ",
+        ["z"] = "ㅋ", ["x"] = "ㅌ", ["c"] = "ㅊ", ["v"] = "ㅍ", ["b"] = "ㅠ",
+        ["n"] = "ㅜ", ["m"] = "ㅡ",
+    };
+
+    private static readonly Dictionary<string, string> KoreanShiftKeys = new()
+    {
+        ["q"] = "ㅃ", ["w"] = "ㅉ", ["e"] = "ㄸ", ["r"] = "ㄲ", ["t"] = "ㅆ",
+        ["o"] = "ㅒ", ["p"] = "ㅖ",
+    };
+
+    private sealed record KeyButton(Button Button, string BaseText);
+    private sealed record KeySpec(KeyKind Kind, string Label, int Width, Action? Action)
+    {
+        public static KeySpec Text(string label, int width = 54) => new(KeyKind.Text, label, width, null);
+        public static KeySpec Command(string label, int width, Action action) => new(KeyKind.Command, label, width, action);
+    }
+
+    private enum KeyKind
+    {
+        Text,
+        Command
     }
 }

@@ -4,9 +4,9 @@
              x:Class="Dreamine.UI.Maui.DreamineVirtualKeyboard"
              IsVisible="False">
 
-    <Border BackgroundColor="#0F1E3A" Stroke="#2D4A6E" StrokeThickness="1" Padding="8">
+    <Border BackgroundColor="#000000" Stroke="#808080" StrokeThickness="4" Padding="18,14">
         <Border.StrokeShape>
-            <RoundRectangle CornerRadius="8" />
+            <RoundRectangle CornerRadius="16" />
         </Border.StrokeShape>
 
         <VerticalStackLayout x:Name="RowsHost" Spacing="4" />
